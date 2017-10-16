@@ -1,0 +1,7 @@
+/home/skarsnik/projects/memstuff/CMakeFiles/install/local.dir
+/home/skarsnik/projects/memstuff/CMakeFiles/install.dir
+/home/skarsnik/projects/memstuff/CMakeFiles/install/strip.dir
+/home/skarsnik/projects/memstuff/CMakeFiles/edit_cache.dir
+/home/skarsnik/projects/memstuff/CMakeFiles/rebuild_cache.dir
+/home/skarsnik/projects/memstuff/CMakeFiles/memstuff.dir
+/home/skarsnik/projects/memstuff/CMakeFiles/list_install_components.dir

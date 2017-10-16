@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/skarsnik/projects/memstuff/main.c
+stdlib.h
+-
+string.h
+-
+stdio.h
+-
+sys/uio.h
+-
+errno.h
+-
+
