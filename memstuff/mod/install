@@ -1,0 +1,3 @@
+transfer_default
+chmod +x $rootfs/bin/memstuff
+return 1
