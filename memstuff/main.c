@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
             return 1;
         char* content = (char*) dest;
         char *tofind = hexstr_to_cstr(argv[5]);
-        printf("Trying to find : %s\n", tofind);
+        s_debug("Trying to find : %s\n", tofind);
         unsigned int tofind_length = strlen(tofind);
         for (unsigned int i = 0; i < length; i++)
         {
