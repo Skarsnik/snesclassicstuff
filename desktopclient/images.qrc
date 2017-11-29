@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>sfcbuttonA.png</file>
+        <file>sfcbuttonB.png</file>
+        <file>sfcbuttonX.png</file>
+        <file>sfcbuttonY.png</file>
+    </qresource>
+</RCC>
