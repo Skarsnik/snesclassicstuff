@@ -6,6 +6,7 @@
 
 #include <QKeyEvent>
 #include <QMainWindow>
+#include <QSignalSpy>
 #include <QTimer>
 
 namespace Ui {
@@ -27,12 +28,17 @@ signals:
 
 private slots:
     void    onTimerTick();
-    void    onInputCoConnected();
+    void    onCommandCoConnected();
     void    onInputNewLine(QByteArray);
     void    onCanoeStarted();
     void    onCanoeStopped();
     void    buttonPressed(SNESButton button);
+    void    onCommandCoConnectionError(TelnetConnection::ConnectionError err);
+    void    onCommandCoDisconnected();
+    void    onInputCoConnected();
 
+
+    void on_recoPushButton_clicked();
 
 private:
     Ui::MainWindow *ui;
@@ -45,6 +51,7 @@ private:
     bool                canoeRunning;
     QVector<bool>       existingSaveState;
     QStringList         currentCanoeExecution;
+    QSignalSpy*         spy;
 
     void                setButtonStatus();
     void                executeCanoe(unsigned int saveNumber);

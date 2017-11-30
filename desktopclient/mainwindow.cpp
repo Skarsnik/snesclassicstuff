@@ -3,16 +3,21 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QSignalSpy>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    //ui->recoPushButton->setIcon(style()->standardIcon(QStyle::SP_DialogResetButton));
     commandCo = new TelnetConnection("localhost", 1023, "root", "clover");
     inputCo = new TelnetConnection("localhost", 1023, "root", "clover");
     canoeRunCo = new TelnetConnection("localhost", 1023, "root", "clover");
     inputDecoder = new InputDecoder();
+    commandCo->debugName = "Command";
+    inputCo->debugName = "Input";
+    canoeRunCo->debugName = "Canoe";
     canoeRunning = false;
     existingSaveState.fill(false, 4);
     setButtonStatus();
@@ -20,15 +25,16 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(&timer, SIGNAL(timeout()), this, SLOT(onTimerTick()));
     connect(inputCo, SIGNAL(commandReturnedNewLine(QByteArray)), this, SLOT(onInputNewLine(QByteArray)));
+    connect(commandCo, SIGNAL(connectionError(TelnetConnection::ConnectionError)), this, SLOT(onCommandCoConnectionError(TelnetConnection::ConnectionError)));
+    connect(commandCo, SIGNAL(disconnected()), this, SLOT(onCommandCoDisconnected()));
     connect(inputDecoder, SIGNAL(buttonPressed(SNESButton)), this, SLOT(buttonPressed(SNESButton)));
     connect(this, SIGNAL(canoeStarted()), this, SLOT(onCanoeStarted()));
     connect(this, SIGNAL(canoeStopped()), this, SLOT(onCanoeStopped()));
+    connect(commandCo, SIGNAL(connected()), this, SLOT(onCommandCoConnected()));
     connect(inputCo, SIGNAL(connected()), this, SLOT(onInputCoConnected()));
-    timer.start(500);
+    spy = new QSignalSpy(commandCo, SIGNAL(connectionError(TelnetConnection::ConnectionError)));
+
     commandCo->conneect();
-    inputCo->conneect();
-    canoeRunCo->conneect();
-    inputCo->setOneCommandMode(true);
 }
 
 MainWindow::~MainWindow()
@@ -42,7 +48,7 @@ void MainWindow::onTimerTick()
     {
         QByteArray result = commandCo->syncExecuteCommand("pidof canoe-shvc > /dev/null && echo 1 || echo 0");
         bool oldcr = canoeRunning;
-        qDebug() << result << result.trimmed();
+        //qDebug() << result << result.trimmed();
         canoeRunning = (result.trimmed() == "1");
         qDebug() << canoeRunning;
         if (oldcr == false && canoeRunning == true)
@@ -53,14 +59,17 @@ void MainWindow::onTimerTick()
     }
 }
 
-void MainWindow::onInputCoConnected()
+void MainWindow::onCommandCoConnected()
 {
-    inputCo->executeCommand("hexdump -v -e '32/1 \"%02X\" \"\\n\"' /dev/input/by-path/platform-twi.2-event-joystick");
+    inputCo->conneect();
+    inputCo->setOneCommandMode(true);
+    canoeRunCo->conneect();
+    timer.start(500);
 }
 
 void MainWindow::onInputNewLine(QByteArray input)
 {
-    qDebug() << input;
+    //qDebug() << input;
     inputDecoder->decodeHexdump(input);
 }
 
@@ -83,6 +92,7 @@ canoe-shvc -rollback-snapshot-period 720 -rom /tmp/rom/skar_lttphack_jp_noss.sfr
 
 void MainWindow::onCanoeStarted()
 {
+    ui->snesStatusLabel->setText("SNES emulator running");
     QByteArray ba = commandCo->syncExecuteCommand("ps | grep canoe | grep -v grep");
     QString result = ba.trimmed();
     QString canoeStr = result.mid(result.indexOf("canoe"));
@@ -110,6 +120,7 @@ void MainWindow::onCanoeStopped()
 {
     existingSaveState.fill(false, 4);
     setButtonStatus();
+    ui->snesStatusLabel->setText("SNES emulator stopped");
 }
 
 void MainWindow::buttonPressed(SNESButton button)
@@ -133,6 +144,28 @@ void MainWindow::buttonPressed(SNESButton button)
         break;
     }
 
+}
+
+void MainWindow::onCommandCoConnectionError(TelnetConnection::ConnectionError err)
+{
+    qDebug() << "Co error";
+    if (err == TelnetConnection::SNESNotRunning)
+        ui->snesStatusLabel->setText("The snes classic is not running or not connected to the computer");
+    if (err == TelnetConnection::ConnectionRefused)
+        ui->snesStatusLabel->setText("Hakchi2 is not running or it's not running its telenet server");
+    timer.stop();
+    ui->recoPushButton->setEnabled(true);
+}
+
+void MainWindow::onCommandCoDisconnected()
+{
+    timer.stop();
+    ui->recoPushButton->setEnabled(true);
+}
+
+void MainWindow::onInputCoConnected()
+{
+    inputCo->executeCommand("hexdump -v -e '32/1 \"%02X\" \"\\n\"' /dev/input/by-path/platform-twi.2-event-joystick");
 }
 
 void MainWindow::executeCanoe(unsigned int saveNumber)
@@ -174,6 +207,7 @@ void MainWindow::closeEvent(QCloseEvent *)
     inputCo->close();
     commandCo->close();
     canoeRunCo->close();
+    qDebug() << spy->count();
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *ev)
@@ -208,3 +242,9 @@ void MainWindow::setButtonStatus()
 }
 
 
+
+void MainWindow::on_recoPushButton_clicked()
+{
+    inputCo->conneect();
+    ui->recoPushButton->setEnabled(false);
+}

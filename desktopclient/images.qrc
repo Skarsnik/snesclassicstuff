@@ -4,5 +4,7 @@
         <file>sfcbuttonB.png</file>
         <file>sfcbuttonX.png</file>
         <file>sfcbuttonY.png</file>
+        <file>refresh.png</file>
     </qresource>
+    <qresource prefix="/"/>
 </RCC>

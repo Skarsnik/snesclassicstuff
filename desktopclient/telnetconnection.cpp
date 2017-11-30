@@ -14,10 +14,11 @@
 #define CMD 0xff
 #define CMD_ECHO 1
 
-
+#define sDebug() qDebug() << debugName
 
 TelnetConnection::TelnetConnection(const QString &hostname, int port, const QString &user, const QString &password) : QObject()
 {
+    qRegisterMetaType<TelnetConnection::ConnectionError>("TelnetConnection::ConnectionError");
     m_host = hostname;
     m_port = port;
     m_user = user;
@@ -25,13 +26,17 @@ TelnetConnection::TelnetConnection(const QString &hostname, int port, const QStr
     m_istate = Init;
     connect(&socket, SIGNAL(readyRead()), this, SLOT(onSocketReadReady()));
     connect(&socket, SIGNAL(connected()), this, SLOT(onSocketConnected()));
+    connect(&socket, SIGNAL(disconnected()), this, SLOT(onSocketDisconnected()));
     connect(&socket, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(onSocketError(QAbstractSocket::SocketError)));
     m_state = Offline;
+    debugName = "default";
     oneCommandMode = false;
 }
 
 QByteArray TelnetConnection::syncExecuteCommand(QString cmd)
 {
+    if (!(m_state == Ready || m_state == Connected))
+        return QByteArray();
     QEventLoop loop;
     executeCommand(cmd);
     connect(this, SIGNAL(commandReturn(QByteArray)), &loop, SLOT(quit()));
@@ -63,18 +68,30 @@ void TelnetConnection::executeCommand(QString toSend)
 
 void TelnetConnection::close()
 {
-    executeCommand("exit");
-    socket.close();
+    if (m_state == Ready)
+        executeCommand("exit");
+    if (m_state != Offline)
+        socket.close();
 }
 
 void TelnetConnection::onSocketConnected()
 {
     //socket.write("");
+    m_istate = Init;
 }
 
-void TelnetConnection::onSocketError(QAbstractSocket::SocketError)
+void TelnetConnection::onSocketError(QAbstractSocket::SocketError error)
 {
     qDebug() << socket.errorString();
+    if (error == QAbstractSocket::ConnectionRefusedError)
+        emit connectionError(TelnetConnection::ConnectionRefused);
+}
+
+void TelnetConnection::onSocketDisconnected()
+{
+    m_state = Offline;
+    sDebug() << "Disconnected";
+    emit disconnected();
 }
 
 
@@ -86,7 +103,17 @@ void TelnetConnection::onSocketReadReady()
   static unsigned int nbRM = 0;
 
   QByteArray data = socket.read(1024);
-  if (data.at(0) == 0xFF)
+  sDebug() << "DATA:" << data;
+  sDebug() << m_state << m_istate;
+  if (m_istate == Init)
+  {
+      if (data.indexOf("Error: NES Mini is offline") != -1)
+      {
+          emit connectionError(TelnetConnection::SNESNotRunning);
+          return;
+      }
+  }
+  if (data.at(0) == (char) 0xFF)
   {
       qDebug() << "Telnet cmd receive, we don't care for now";
       char buf[3];
