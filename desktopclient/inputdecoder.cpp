@@ -1,19 +1,29 @@
 #include "inputdecoder.h"
+#include <QtEndian>
 #include <QDebug>
 
 InputDecoder::InputDecoder() : QObject()
 {
-    strToKey["C202"] = SNESButton::Right;
-    strToKey["C102"] = SNESButton::Down;
-    strToKey["C302"] = SNESButton::Left;
-    strToKey["C002"] = SNESButton::Up;
-    strToKey["3101"] = SNESButton::B;
-    strToKey["3001"] = SNESButton::A;
-    strToKey["3301"] = SNESButton::X;
-    strToKey["3401"] = SNESButton::Y;
-    strToKey["3B01"] = SNESButton::Start;
-    strToKey["3A01"] = SNESButton::Select;
+    Lpressed = false;
+    Rpressed = false;
 }
+
+/*
+93698 388871 3 2 0
+93698 388883 1 310 1
+
+93698 388888 0 0 0
+93698 612196 3 2 0 */
+
+/*
+
+93738 985480 3 5 0
+93738 985496 1 311 1
+
+93738 985502 0 0 0
+93739 258830 3 5 0
+ * */
+
 
 /*
    RAW: "F611000081690B00000000000000000006120000B8C302000100C20201000000\r\n"
@@ -58,9 +68,66 @@ struct timeval {
 
 */
 
+RawInputEvent    stringtoRawInputEvent(QString str)
+{
+    RawInputEvent toret;
+    //qDebug() << str << "code" << str.mid(20, 4) << "type : " << str.mid(16, 4);
+    toret.time_s  =  qToBigEndian<quint32>(str.left(8).toUInt(NULL, 16));
+    toret.time_us = qToBigEndian<quint32>(str.mid(8, 8).toUInt(NULL, 16));
+    toret.type = qToBigEndian<quint16>(str.mid(16, 4).toUInt(NULL, 16));
+    toret.code = qToBigEndian<quint16>(str.mid(20, 4).toUInt(NULL, 16));
+    toret.value = qToBigEndian<qint32>(str.mid(24, 8).toInt(NULL, 16));
+    return toret;
+}
+
+void    InputDecoder::processEvent(RawInputEvent ev)
+{
+    //qDebug() << ev.time_s << ev.time_us << ev.type << ev.code << ev.value;
+    //Type 0 is a an empty event to separate event
+    if (ev.type == 0x00)
+        return ;
+    if (ev.type == 0x01) // 01 is standard key press/release event
+    {
+        if (ev.code == 311 || ev.code == 310)
+            return;
+        if (ev.value == 1)
+            emit buttonPressed((InputDecoder::SNESButton)ev.code);
+        if (ev.value == 0)
+            emit buttonReleased((InputDecoder::SNESButton)ev.code);
+
+    }
+    if (ev.type == 0x03) // for L and R
+    {
+        if (ev.code == 2)
+        {
+            if (Lpressed)
+                emit buttonReleased((InputDecoder::SNESButton)ev.code);
+            else
+                emit buttonPressed((InputDecoder::SNESButton)ev.code);
+            Lpressed = !Lpressed;
+        }
+        if (ev.code == 5)
+        {
+            if (Rpressed)
+                emit buttonReleased((InputDecoder::SNESButton)ev.code);
+            else
+                emit buttonPressed((InputDecoder::SNESButton)ev.code);
+            Rpressed = !Rpressed;
+        }
+    }
+}
+
 void InputDecoder::decodeHexdump(QString toDecode)
 {
-    int dumb = toDecode.indexOf("000100");
+    QString first = toDecode.left(32);
+    QString second = toDecode.mid(32, 32);
+    RawInputEvent   firstEvent = stringtoRawInputEvent(first);
+    RawInputEvent   secondEvent = stringtoRawInputEvent(second);
+
+    processEvent(firstEvent);
+    processEvent(secondEvent);
+    return ;
+    /*int dumb = toDecode.indexOf("000100");
     qDebug() << dumb;
     QString pressReleased = toDecode.mid(dumb + 10, 2); //release/pressed
     qDebug() << pressReleased;
@@ -72,6 +139,6 @@ void InputDecoder::decodeHexdump(QString toDecode)
     if (pressReleased == "01")
         emit buttonPressed(key);
     else
-        emit buttonReleased(key);
+        emit buttonReleased(key);*/
 
 }

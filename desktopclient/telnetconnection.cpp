@@ -13,6 +13,7 @@
 #define DONT 0xfe
 #define CMD 0xff
 #define CMD_ECHO 1
+#define ITPC 244
 
 #define sDebug() qDebug() << debugName
 
@@ -70,6 +71,14 @@ void TelnetConnection::close()
 {
     if (m_state == Ready)
         executeCommand("exit");
+    else {
+        qDebug() << "Sending interupt";
+        char buf[3];
+        buf[0] = CMD;
+        buf[1] = CMD;
+        buf[2] = ITPC;
+        socket.write(buf, 3);
+    }
     if (m_state != Offline)
         socket.close();
 }
@@ -103,8 +112,8 @@ void TelnetConnection::onSocketReadReady()
   static unsigned int nbRM = 0;
 
   QByteArray data = socket.read(1024);
-  sDebug() << "DATA:" << data;
-  sDebug() << m_state << m_istate;
+  //sDebug() << "DATA:" << data;
+  //sDebug() << m_state << m_istate;
   if (m_istate == Init)
   {
       if (data.indexOf("Error: NES Mini is offline") != -1)
@@ -123,7 +132,7 @@ void TelnetConnection::onSocketReadReady()
       socket.write(buf,  3);
       return ;
   }
-  qDebug() << "RAW:" << data;
+  //qDebug() << "RAW:" << data;
   if (m_istate == LoginWritten && data == CLOVER_SHELL_PROMPT)
   {
       m_istate = Logged;
@@ -177,14 +186,22 @@ void TelnetConnection::onSocketReadReady()
   // We are waiting for the output of a command
   if (m_istate == WaitingForCmd)
   {
-      qDebug() << "Waiting for command";
+      //qDebug() << "Waiting for command";
       int pos = readBuffer.indexOf(CLOVER_SHELL_PROMPT);
       if (oneCommandMode)
       {
           if (readBuffer.indexOf("\r\n") != -1)
           {
               //qDebug() << "PIKOOOOOOOOOOOOOOOOOOO";
-              emit  commandReturnedNewLine(readBuffer);
+              //qDebug() << readBuffer;
+              int rPos = readBuffer.indexOf("\r\n");
+              while (rPos != -1)
+              {
+                //qDebug() << readBuffer.left(rPos);
+                emit  commandReturnedNewLine(readBuffer.left(rPos));
+                readBuffer.remove(0, rPos + 2);
+                rPos = readBuffer.indexOf("\r\n");
+              }
               readBuffer.clear();
           }
       }
