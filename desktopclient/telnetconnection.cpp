@@ -1,11 +1,18 @@
 #include "telnetconnection.h"
 #include <QDebug>
+#include <QLoggingCategory>
 #include <QEventLoop>
+
+
+Q_LOGGING_CATEGORY(log_telnetconnection, "Telnet")
+
+#define sDebug() qCDebug(log_telnetconnection()) << debugName
 
 // TELNET STUFF
 
 
 #define CLOVER_SHELL_PROMPT "root@CLOVER:~# "
+#define CHANGED_PROMPT "KLDFJLD45SDKL@4"
 #define CLOVER_SHELL_PROMPT_SIZE 15
 #define DO 0xfd
 #define WONT 0xfc
@@ -15,7 +22,7 @@
 #define CMD_ECHO 1
 #define ITPC 244
 
-#define sDebug() qDebug() << debugName
+
 
 TelnetConnection::TelnetConnection(const QString &hostname, int port, const QString &user, const QString &password) : QObject()
 {
@@ -62,7 +69,7 @@ void TelnetConnection::conneect()
 
 void TelnetConnection::executeCommand(QString toSend)
 {
-    //qDebug() << toSend;
+    sDebug() << "Executing : " << toSend;
     writeToTelnet(toSend.toLatin1() + "\r\n");
     m_state = WaitingForCommand;
 }
@@ -72,7 +79,7 @@ void TelnetConnection::close()
     if (m_state == Ready)
         executeCommand("exit");
     else {
-        qDebug() << "Sending interupt";
+        sDebug() << "Sending interupt";
         char buf[3];
         buf[0] = CMD;
         buf[1] = CMD;
@@ -91,7 +98,7 @@ void TelnetConnection::onSocketConnected()
 
 void TelnetConnection::onSocketError(QAbstractSocket::SocketError error)
 {
-    qDebug() << socket.errorString();
+    sDebug() << socket.errorString();
     if (error == QAbstractSocket::ConnectionRefusedError)
         emit connectionError(TelnetConnection::ConnectionRefused);
 }
@@ -124,7 +131,7 @@ void TelnetConnection::onSocketReadReady()
   }
   if (data.at(0) == (char) 0xFF)
   {
-      qDebug() << "Telnet cmd receive, we don't care for now";
+      //qDebug() << "Telnet cmd receive, we don't care for now";
       char buf[3];
       buf[0] = CMD;
       buf[1] = WILL;
@@ -137,6 +144,7 @@ void TelnetConnection::onSocketReadReady()
   {
       m_istate = Logged;
       m_state = Connected;
+      executeCommand("PS1='" + QByteArray(CHANGED_PROMPT) + "'");
       emit connected();
       return ;
   }
@@ -160,7 +168,7 @@ void TelnetConnection::onSocketReadReady()
   // A command string has be written, we want to remove the feedback of it
   if (m_istate == DataWritten)
   {
-      qDebug() << "DataWritten" << lastSent << lastSent.size() << "===" << readBuffer << readBuffer.size();
+      //qDebug() << "DataWritten" << lastSent << lastSent.size() << "===" << readBuffer << readBuffer.size();
       //Bullshit to remove \r\r\n when the cmd sent is more than 80 (including prompt) (fuck you telnet)
       while (readBuffer.size() > charToCheck)
       {
@@ -187,7 +195,7 @@ void TelnetConnection::onSocketReadReady()
   if (m_istate == WaitingForCmd)
   {
       //qDebug() << "Waiting for command";
-      int pos = readBuffer.indexOf(CLOVER_SHELL_PROMPT);
+      int pos = readBuffer.indexOf(CHANGED_PROMPT);
       if (oneCommandMode)
       {
           if (readBuffer.indexOf("\r\n") != -1)
@@ -207,8 +215,8 @@ void TelnetConnection::onSocketReadReady()
       }
       if (pos != -1)
       {
-        readBuffer.remove(pos, QString(CLOVER_SHELL_PROMPT).size());
-        qDebug() << "=======\n" << "Received shell cmd data : " << readBuffer << "\n=======\n";
+        readBuffer.remove(pos, QString(CHANGED_PROMPT).size());
+        sDebug() << "======="; sDebug() << "Received shell cmd data"; sDebug() << readBuffer ; sDebug() << "=======";
         m_state = Ready;
         m_istate = IReady;
         lastCommandReturn = readBuffer;
