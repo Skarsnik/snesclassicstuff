@@ -46,7 +46,9 @@ QByteArray MiniFtp::get(QString file)
 void MiniFtp::put(QString dest, QByteArray &data)
 {
     sDebug() << "Put : " << data.size() << " to " << dest;
+    connect();
     lastPutCmd = qftp.put(data, dest);
+    sDebug() << "Put cmd id is : " << lastPutCmd;
     QEventLoop  loop;
     QObject::connect(this, SIGNAL(ftpPutFinished()), &loop, SLOT(quit()));
 }
@@ -100,7 +102,10 @@ void MiniFtp::onFtpCommandFinished(int id, bool error)
     }
     if (id == lastPutCmd)
     {
-        emit ftpPutFinished();
+        if (error)
+            sDebug() << "Put error : " << qftp.errorString();
+        else
+            emit ftpPutFinished();
     }
 }
 

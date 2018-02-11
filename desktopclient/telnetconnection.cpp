@@ -129,15 +129,25 @@ void TelnetConnection::onSocketReadReady()
           return;
       }
   }
-  if (data.at(0) == (char) 0xFF)
+  if (data.at(0) == (char) 0xFF && m_istate < IReady)
   {
-      //qDebug() << "Telnet cmd receive, we don't care for now";
+      sDebug() << "Telnet cmd receive, we don't care for now";
+      sDebug() << "Received : " << data;
       char buf[3];
       buf[0] = CMD;
       buf[1] = WILL;
       buf[2] = 34; // Line mode;
       socket.write(buf,  3);
       return ;
+  }
+  if (data.indexOf(0xFF) != -1)
+  {
+      int pos = data.indexOf(0xFF);
+      sDebug() << "removing telnet cmd :" << data.at(pos +1);
+      if (data.at(pos + 1) == (char) 0xFF)
+          data.remove(pos, 3);
+      else
+          data.remove(pos, 2);
   }
   //qDebug() << "RAW:" << data;
   if (m_istate == LoginWritten && data == CLOVER_SHELL_PROMPT)
@@ -168,7 +178,7 @@ void TelnetConnection::onSocketReadReady()
   // A command string has be written, we want to remove the feedback of it
   if (m_istate == DataWritten)
   {
-      //qDebug() << "DataWritten" << lastSent << lastSent.size() << "===" << readBuffer << readBuffer.size();
+      //sDebug() << "DataWritten" << lastSent << lastSent.size() << "===" << readBuffer << readBuffer.size();
       //Bullshit to remove \r\r\n when the cmd sent is more than 80 (including prompt) (fuck you telnet)
       while (readBuffer.size() > charToCheck)
       {
@@ -182,7 +192,7 @@ void TelnetConnection::onSocketReadReady()
             charToCheck += FUCK_LINE_SIZE;
             nbRM = 0;
           }
-          //qDebug() << readBuffer << nbRM << readBuffer.size() << charToCheck;
+          //sDebug() << readBuffer << nbRM << readBuffer.size() << charToCheck;
       }
       if (readBuffer.indexOf(lastSent) == 0)
       {
@@ -194,7 +204,7 @@ void TelnetConnection::onSocketReadReady()
   // We are waiting for the output of a command
   if (m_istate == WaitingForCmd)
   {
-      //qDebug() << "Waiting for command";
+      //sDebug() << "Waiting for command";
       int pos = readBuffer.indexOf(CHANGED_PROMPT);
       if (oneCommandMode)
       {
