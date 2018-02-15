@@ -22,7 +22,7 @@ MiniFtp::MiniFtp(QObject *parent) : QObject(parent)
 
 void MiniFtp::connect()
 {
-    if (m_state != QFtp::Unconnected)
+    if (m_state != MiniFtp::None)
         return;
     sDebug() << "Connecting to server";
     qftp.connectToHost("127.0.0.1", 1021);
