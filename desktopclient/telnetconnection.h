@@ -26,6 +26,8 @@ private:
             Init,
             LoginWritten,
             Logged,
+            PromptChangeWritten,
+            PromptChanged,
             IReady,
             DataWritten,
             WaitingForCmd

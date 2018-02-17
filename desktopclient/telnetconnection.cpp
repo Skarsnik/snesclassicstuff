@@ -119,8 +119,8 @@ void TelnetConnection::onSocketReadReady()
   static unsigned int nbRM = 0;
 
   QByteArray data = socket.read(1024);
-  //sDebug() << "DATA:" << data;
-  //sDebug() << m_state << m_istate;
+  sDebug() << "DATA:" << data;
+  sDebug() << m_state << m_istate;
   if (m_istate == Init)
   {
       if (data.indexOf("Error: NES Mini is offline") != -1)
@@ -149,13 +149,24 @@ void TelnetConnection::onSocketReadReady()
       else
           data.remove(pos, 2);
   }
+  if (m_istate == PromptChangeWritten)
+  {
+      readBuffer.append(data);
+      if (readBuffer == "PS1='" + QByteArray(CHANGED_PROMPT) + "'\r\n" + QByteArray(CHANGED_PROMPT))
+      {
+          m_istate = PromptChanged;
+          readBuffer.clear();
+          m_state = Connected;
+          emit connected();
+      }
+      return ;
+  }
   //qDebug() << "RAW:" << data;
   if (m_istate == LoginWritten && data == CLOVER_SHELL_PROMPT)
   {
       m_istate = Logged;
-      m_state = Connected;
-      executeCommand("PS1='" + QByteArray(CHANGED_PROMPT) + "'");
-      emit connected();
+      writeToTelnet("PS1='" + QByteArray(CHANGED_PROMPT) + "'\r\n");
+      m_istate = PromptChangeWritten;
       return ;
   }
   if (data.indexOf("CLOVER login: ") != -1)
@@ -164,17 +175,11 @@ void TelnetConnection::onSocketReadReady()
       m_istate = LoginWritten;
       return;
   }
-  if (m_istate < Logged)
+  if (m_istate < PromptChanged)
       return ;
   readBuffer.append(data);
   //qDebug() << m_istate << readBuffer.size();
   // We entered the login
-  if (m_istate == LoginWritten)
-  {
-      if (readBuffer == "root\r\n")
-          readBuffer.clear();
-      return;
-  }
   // A command string has be written, we want to remove the feedback of it
   if (m_istate == DataWritten)
   {
@@ -201,16 +206,17 @@ void TelnetConnection::onSocketReadReady()
           charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
       }
   }
+  sDebug() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
   // We are waiting for the output of a command
   if (m_istate == WaitingForCmd)
   {
-      //sDebug() << "Waiting for command";
+      sDebug() << "Waiting for command" << readBuffer;
       int pos = readBuffer.indexOf(CHANGED_PROMPT);
       if (oneCommandMode)
       {
           if (readBuffer.indexOf("\r\n") != -1)
           {
-              //qDebug() << "PIKOOOOOOOOOOOOOOOOOOO";
+              qDebug() << "PIKOOOOOOOOOOOOOOOOOOO";
               //qDebug() << readBuffer;
               int rPos = readBuffer.indexOf("\r\n");
               while (rPos != -1)
@@ -239,7 +245,7 @@ void TelnetConnection::onSocketReadReady()
 
 void TelnetConnection::writeToTelnet(QByteArray toWrite)
 {
-    if (m_istate == IReady || m_istate == Logged)
+    if (m_istate == IReady || m_istate == PromptChanged)
         m_istate = DataWritten;
     lastSent = toWrite;
     socket.write(toWrite);
