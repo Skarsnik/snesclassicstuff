@@ -116,6 +116,7 @@ void MiniFtp::onFtpStateChanged(int state)
     {
         sDebug() << "Connected";
         m_state = Connected;
+        emit connected();
     }
     else
         m_state = None;
