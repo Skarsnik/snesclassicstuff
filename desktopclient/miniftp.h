@@ -21,6 +21,7 @@ public:
     void          connect();
     QByteArray    get(QString file);
     void          put(QString dest, QByteArray& data);
+    void          close();
     State         state();
 
 signals:
@@ -28,6 +29,7 @@ signals:
     void            dataReceived();
     void            ftpPutFinished();
     void            connected();
+    void            disconnected();
 
 public slots:
 
