@@ -14,8 +14,9 @@ Q_LOGGING_CATEGORY(log_lowtelnetconnection, "LowLevelTelnet")
 
 
 #define CLOVER_SHELL_PROMPT "root@CLOVER:~# "
-#define CHANGED_PROMPT "KLDFJLD45SDKL@4"
+#define CHANGED_PROMPT      "KLDFJLD45SDKL@4"
 #define CLOVER_SHELL_PROMPT_SIZE 15
+#define FUCK_LINE_SIZE 80
 #define DO 0xfd
 #define WONT 0xfc
 #define WILL 0xfb
@@ -41,6 +42,8 @@ TelnetConnection::TelnetConnection(const QString &hostname, int port, const QStr
     m_state = Offline;
     debugName = "default";
     oneCommandMode = false;
+    nbRM = 0;
+    charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
 }
 
 QByteArray TelnetConnection::syncExecuteCommand(QString cmd)
@@ -67,6 +70,8 @@ void TelnetConnection::setOneCommandMode(bool mode)
 void TelnetConnection::conneect()
 {
     socket.connectToHost(m_host, m_port);
+    nbRM = 0;
+    charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
 }
 
 void TelnetConnection::executeCommand(QString toSend)
@@ -116,13 +121,8 @@ void TelnetConnection::onSocketDisconnected()
 }
 
 
-#define FUCK_LINE_SIZE 80
-
 void TelnetConnection::onSocketReadReady()
 {
-  static unsigned int charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
-  static unsigned int nbRM = 0;
-
   QByteArray data = socket.read(1024);
   lDebug() << "Received data on socket";
   lDebug() << "DATA:" << data;
@@ -184,21 +184,28 @@ void TelnetConnection::onSocketReadReady()
   if (m_istate == DataWritten)
   {
       lDebug() << "Removing input to the output";
-      lDebug() << "DataWritten" << lastSent << lastSent.size() << "===" << readBuffer << readBuffer.size();
+      lDebug() << "DataWritten : " << lastSent << lastSent.size();
+      lDebug() << "Received : " << readBuffer << readBuffer.size() << " charToCheck" << charToCheck;
       //Bullshit to remove \r\r\n when the cmd sent is more than 80 (including prompt) (fuck you telnet)
       while (readBuffer.size() > charToCheck)
       {
+          lDebug() << "Cmd long, get \\r\\r\\n in the middle. We will remove stuff if valid -- nbRm" << nbRM << readBuffer.mid(charToCheck - 2, 5);
+          // Sometime it does not add \r\r\n because... telnet?
+          if (!(readBuffer.at(charToCheck) == '\n' || readBuffer.at(charToCheck) == '\r'))
+              break;
+          //lDebug() << "Cmd long, get \\r\\r\\n in the middle. We will remove stuff: nbRm" << nbRM << readBuffer.mid(charToCheck - 2, 5);
           while (charToCheck < readBuffer.size() && nbRM < 3)
           {
               nbRM++;
               readBuffer.remove(charToCheck, 1);
           }
+          lDebug() << "Removed" << nbRM << "/3 Characters";
           if (nbRM == 3)
           {
             charToCheck += FUCK_LINE_SIZE;
             nbRM = 0;
           }
-          //sDebug() << readBuffer << nbRM << readBuffer.size() << charToCheck;
+          lDebug() << "End of remove" << readBuffer << nbRM << readBuffer.size() << charToCheck;
       }
       if (readBuffer.indexOf(lastSent) == 0)
       {

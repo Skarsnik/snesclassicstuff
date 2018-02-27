@@ -120,6 +120,7 @@ void MiniFtp::onFtpStateChanged(int state)
     sDebug() << "State changed to " << state << qftp.errorString();
     if (state == QFtp::Unconnected)
     {
+        m_state = None;
         emit disconnected();
     }
     if (state == QFtp::LoggedIn)
@@ -128,6 +129,4 @@ void MiniFtp::onFtpStateChanged(int state)
         m_state = Connected;
         emit connected();
     }
-    else
-        m_state = None;
 }
