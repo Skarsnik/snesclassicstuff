@@ -53,6 +53,12 @@ void MiniFtp::put(QString dest, QByteArray &data)
     QObject::connect(this, SIGNAL(ftpPutFinished()), &loop, SLOT(quit()));
 }
 
+void MiniFtp::close()
+{
+    sDebug() << "Closing MiniFTP";
+    qftp.close();
+}
+
 MiniFtp::State MiniFtp::state()
 {
     return m_state;
@@ -112,11 +118,15 @@ void MiniFtp::onFtpCommandFinished(int id, bool error)
 void MiniFtp::onFtpStateChanged(int state)
 {
     sDebug() << "State changed to " << state << qftp.errorString();
+    if (state == QFtp::Unconnected)
+    {
+        m_state = None;
+        emit disconnected();
+    }
     if (state == QFtp::LoggedIn)
     {
         sDebug() << "Connected";
         m_state = Connected;
+        emit connected();
     }
-    else
-        m_state = None;
 }

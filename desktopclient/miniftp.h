@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QNetworkAccessManager>
 #include <QAuthenticator>
-#include "qtftp/src/qftp/qftp.h"
+#include "../qtftp/src/qftp/qftp.h"
 
 #define HAKCHI2URL "ftp://root:clover@127.0.0.1:1021"
 #define HAKCHI2HOST "127.0.0.1:1021"
@@ -21,12 +21,15 @@ public:
     void          connect();
     QByteArray    get(QString file);
     void          put(QString dest, QByteArray& data);
+    void          close();
     State         state();
 
 signals:
-    void          error();
-    void          dataReceived();
-    void          ftpPutFinished();
+    void            error();
+    void            dataReceived();
+    void            ftpPutFinished();
+    void            connected();
+    void            disconnected();
 
 public slots:
 

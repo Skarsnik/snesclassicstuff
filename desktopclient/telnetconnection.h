@@ -69,6 +69,8 @@ private:
         State       m_state;
         InternalState m_istate;
         bool    oneCommandMode;
+        unsigned int        nbRM;
+        unsigned int        charToCheck;
 
 
         void    writeToTelnet(QByteArray toWrite);

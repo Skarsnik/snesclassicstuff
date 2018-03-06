@@ -5,15 +5,18 @@
 
 
 Q_LOGGING_CATEGORY(log_telnetconnection, "Telnet")
+Q_LOGGING_CATEGORY(log_lowtelnetconnection, "LowLevelTelnet")
 
 #define sDebug() qCDebug(log_telnetconnection()) << debugName
+#define lDebug() qCDebug(log_lowtelnetconnection()) << debugName
 
 // TELNET STUFF
 
 
 #define CLOVER_SHELL_PROMPT "root@CLOVER:~# "
-#define CHANGED_PROMPT "KLDFJLD45SDKL@4"
+#define CHANGED_PROMPT      "KLDFJLD45SDKL@4"
 #define CLOVER_SHELL_PROMPT_SIZE 15
+#define FUCK_LINE_SIZE 80
 #define DO 0xfd
 #define WONT 0xfc
 #define WILL 0xfb
@@ -39,6 +42,8 @@ TelnetConnection::TelnetConnection(const QString &hostname, int port, const QStr
     m_state = Offline;
     debugName = "default";
     oneCommandMode = false;
+    nbRM = 0;
+    charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
 }
 
 QByteArray TelnetConnection::syncExecuteCommand(QString cmd)
@@ -65,6 +70,8 @@ void TelnetConnection::setOneCommandMode(bool mode)
 void TelnetConnection::conneect()
 {
     socket.connectToHost(m_host, m_port);
+    nbRM = 0;
+    charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
 }
 
 void TelnetConnection::executeCommand(QString toSend)
@@ -76,18 +83,21 @@ void TelnetConnection::executeCommand(QString toSend)
 
 void TelnetConnection::close()
 {
+    sDebug() << "Closing Telnet connection";
     if (m_state == Ready)
         executeCommand("exit");
     else {
         sDebug() << "Sending interupt";
         char buf[3];
-        buf[0] = CMD;
-        buf[1] = CMD;
-        buf[2] = ITPC;
+        buf[0] = '\r';
+        buf[1] = '\n';
+        buf[2] = 0x03;
         socket.write(buf, 3);
+        socket.write("exit\r\n", 6);
     }
     if (m_state != Offline)
         socket.close();
+    sDebug() << "Should be closed";
 }
 
 void TelnetConnection::onSocketConnected()
@@ -111,16 +121,12 @@ void TelnetConnection::onSocketDisconnected()
 }
 
 
-#define FUCK_LINE_SIZE 80
-
 void TelnetConnection::onSocketReadReady()
 {
-  static unsigned int charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
-  static unsigned int nbRM = 0;
-
   QByteArray data = socket.read(1024);
-  sDebug() << "DATA:" << data;
-  sDebug() << m_state << m_istate;
+  lDebug() << "Received data on socket";
+  lDebug() << "DATA:" << data;
+  lDebug() << m_state << m_istate;
   if (m_istate == Init)
   {
       if (data.indexOf("Error: NES Mini is offline") != -1)
@@ -132,7 +138,7 @@ void TelnetConnection::onSocketReadReady()
   if (data.at(0) == (char) 0xFF && m_istate < IReady)
   {
       sDebug() << "Telnet cmd receive, we don't care for now";
-      sDebug() << "Received : " << data;
+      lDebug() << "Received : " << data;
       char buf[3];
       buf[0] = CMD;
       buf[1] = WILL;
@@ -143,7 +149,7 @@ void TelnetConnection::onSocketReadReady()
   if (data.indexOf(0xFF) != -1)
   {
       int pos = data.indexOf(0xFF);
-      sDebug() << "removing telnet cmd :" << data.at(pos +1);
+      lDebug() << "Removing telnet cmd : " << data.at(pos +1);
       if (data.at(pos + 1) == (char) 0xFF)
           data.remove(pos, 3);
       else
@@ -178,26 +184,34 @@ void TelnetConnection::onSocketReadReady()
   if (m_istate < PromptChanged)
       return ;
   readBuffer.append(data);
-  //qDebug() << m_istate << readBuffer.size();
+  lDebug() << m_istate << readBuffer.size();
   // We entered the login
   // A command string has be written, we want to remove the feedback of it
   if (m_istate == DataWritten)
   {
-      //sDebug() << "DataWritten" << lastSent << lastSent.size() << "===" << readBuffer << readBuffer.size();
+      lDebug() << "Removing input to the output";
+      lDebug() << "DataWritten : " << lastSent << lastSent.size();
+      lDebug() << "Received : " << readBuffer << readBuffer.size() << " charToCheck" << charToCheck;
       //Bullshit to remove \r\r\n when the cmd sent is more than 80 (including prompt) (fuck you telnet)
       while (readBuffer.size() > charToCheck)
       {
+          lDebug() << "Cmd long, get \\r\\r\\n in the middle. We will remove stuff if valid -- nbRm" << nbRM << readBuffer.mid(charToCheck - 2, 5);
+          // Sometime it does not add \r\r\n because... telnet?
+          if (!(readBuffer.at(charToCheck) == '\n' || readBuffer.at(charToCheck) == '\r'))
+              break;
+          //lDebug() << "Cmd long, get \\r\\r\\n in the middle. We will remove stuff: nbRm" << nbRM << readBuffer.mid(charToCheck - 2, 5);
           while (charToCheck < readBuffer.size() && nbRM < 3)
           {
               nbRM++;
               readBuffer.remove(charToCheck, 1);
           }
+          lDebug() << "Removed" << nbRM << "/3 Characters";
           if (nbRM == 3)
           {
             charToCheck += FUCK_LINE_SIZE;
             nbRM = 0;
           }
-          //sDebug() << readBuffer << nbRM << readBuffer.size() << charToCheck;
+          lDebug() << "End of remove" << readBuffer << nbRM << readBuffer.size() << charToCheck;
       }
       if (readBuffer.indexOf(lastSent) == 0)
       {
@@ -210,18 +224,19 @@ void TelnetConnection::onSocketReadReady()
   // We are waiting for the output of a command
   if (m_istate == WaitingForCmd)
   {
-      sDebug() << "Waiting for command" << readBuffer;
+      lDebug() << "Waiting for command";
       int pos = readBuffer.indexOf(CHANGED_PROMPT);
       if (oneCommandMode)
       {
+          lDebug() << "Command mode";
           if (readBuffer.indexOf("\r\n") != -1)
           {
-              qDebug() << "PIKOOOOOOOOOOOOOOOOOOO";
-              //qDebug() << readBuffer;
+              //qDebug() << "PIKOOOOOOOOOOOOOOOOOOO";
+              lDebug() << "Readbuffer : " << readBuffer;
               int rPos = readBuffer.indexOf("\r\n");
               while (rPos != -1)
               {
-                //qDebug() << readBuffer.left(rPos);
+                lDebug() << readBuffer.left(rPos);
                 emit  commandReturnedNewLine(readBuffer.left(rPos));
                 readBuffer.remove(0, rPos + 2);
                 rPos = readBuffer.indexOf("\r\n");
@@ -232,10 +247,11 @@ void TelnetConnection::onSocketReadReady()
       if (pos != -1)
       {
         readBuffer.remove(pos, QString(CHANGED_PROMPT).size());
-        sDebug() << "======="; sDebug() << "Received shell cmd data"; sDebug() << readBuffer ; sDebug() << "=======";
+        lDebug() << "======="; lDebug() << "Received shell cmd data"; lDebug() << readBuffer ; lDebug() << "=======";
         m_state = Ready;
         m_istate = IReady;
         lastCommandReturn = readBuffer;
+        sDebug() << "Command returned : " << lastCommandReturn;
         emit commandReturn(lastCommandReturn);
         readBuffer.clear();
         charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
