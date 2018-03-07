@@ -69,6 +69,7 @@ void TelnetConnection::setOneCommandMode(bool mode)
 
 void TelnetConnection::conneect()
 {
+    sDebug() << "Connection requested";
     socket.connectToHost(m_host, m_port);
     nbRM = 0;
     charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
@@ -78,7 +79,7 @@ void TelnetConnection::executeCommand(QString toSend)
 {
     sDebug() << "Executing : " << toSend;
     writeToTelnet(toSend.toLatin1() + "\r\n");
-    m_state = WaitingForCommand;
+    setState(WaitingForCommand);
 }
 
 void TelnetConnection::close()
@@ -115,7 +116,7 @@ void TelnetConnection::onSocketError(QAbstractSocket::SocketError error)
 
 void TelnetConnection::onSocketDisconnected()
 {
-    m_state = Offline;
+    setState(Offline);
     sDebug() << "Disconnected";
     emit disconnected();
 }
@@ -162,7 +163,8 @@ void TelnetConnection::onSocketReadReady()
       {
           m_istate = PromptChanged;
           readBuffer.clear();
-          m_state = Connected;
+          setState(Connected);
+          //writeToTelnet("echo 'Hello world'\r\n");
           emit connected();
       }
       return ;
@@ -220,7 +222,7 @@ void TelnetConnection::onSocketReadReady()
           charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
       }
   }
-  sDebug() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
+  //lDebug() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
   // We are waiting for the output of a command
   if (m_istate == WaitingForCmd)
   {
@@ -248,7 +250,7 @@ void TelnetConnection::onSocketReadReady()
       {
         readBuffer.remove(pos, QString(CHANGED_PROMPT).size());
         lDebug() << "======="; lDebug() << "Received shell cmd data"; lDebug() << readBuffer ; lDebug() << "=======";
-        m_state = Ready;
+        setState(Ready);
         m_istate = IReady;
         lastCommandReturn = readBuffer;
         sDebug() << "Command returned : " << lastCommandReturn;
@@ -261,8 +263,15 @@ void TelnetConnection::onSocketReadReady()
 
 void TelnetConnection::writeToTelnet(QByteArray toWrite)
 {
+    lDebug() << "Writing to telnet " << toWrite << m_istate;
     if (m_istate == IReady || m_istate == PromptChanged)
         m_istate = DataWritten;
     lastSent = toWrite;
     socket.write(toWrite);
+}
+
+void TelnetConnection::setState(TelnetConnection::State st)
+{
+    lDebug() << "State changed to " << st;
+    m_state = st;
 }
