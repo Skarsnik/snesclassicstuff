@@ -20,6 +20,11 @@ MiniFtp::MiniFtp(QObject *parent) : QObject(parent)
     m_state = None;
 }
 
+MiniFtp::~MiniFtp()
+{
+    qDebug() << "Delete MiniFTP";
+}
+
 void MiniFtp::connect()
 {
     if (m_state != MiniFtp::None)

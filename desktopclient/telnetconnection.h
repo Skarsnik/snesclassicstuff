@@ -24,6 +24,8 @@ public:
 //private:
         enum InternalState {
             Init,
+            AttemptConnection,
+            SocketConnected,
             LoginWritten,
             Logged,
             PromptChangeWritten,

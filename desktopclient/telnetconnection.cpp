@@ -7,8 +7,8 @@
 Q_LOGGING_CATEGORY(log_telnetconnection, "Telnet")
 Q_LOGGING_CATEGORY(log_lowtelnetconnection, "LowLevelTelnet")
 
-#define sDebug() qCDebug(log_telnetconnection()) << debugName
-#define lDebug() qCDebug(log_lowtelnetconnection()) << debugName
+#define sDebug() QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, log_telnetconnection().categoryName()).debug() << debugName
+#define lDebug() QMessageLogger(QT_MESSAGELOG_FILE, QT_MESSAGELOG_LINE, QT_MESSAGELOG_FUNC, log_lowtelnetconnection().categoryName()).debug() << debugName
 
 // TELNET STUFF
 
@@ -43,6 +43,7 @@ TelnetConnection::TelnetConnection(const QString &hostname, int port, const QStr
     debugName = "default";
     oneCommandMode = false;
     nbRM = 0;
+    sDebug() << "Creating telnetconnection object";
     charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
 }
 
@@ -54,6 +55,7 @@ QByteArray TelnetConnection::syncExecuteCommand(QString cmd)
     executeCommand(cmd);
     connect(this, SIGNAL(commandReturn(QByteArray)), &loop, SLOT(quit()));
     loop.exec();
+    sDebug() << "syncCommand done";
     return lastCommandReturn;
 }
 
@@ -69,10 +71,13 @@ void TelnetConnection::setOneCommandMode(bool mode)
 
 void TelnetConnection::conneect()
 {
-    sDebug() << "Connection requested";
+    sDebug() << "Connection requested" << m_istate;
+    if (m_istate != Init)
+        return;
     socket.connectToHost(m_host, m_port);
     nbRM = 0;
     charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
+    m_istate = AttemptConnection;
 }
 
 void TelnetConnection::executeCommand(QString toSend)
@@ -104,7 +109,7 @@ void TelnetConnection::close()
 void TelnetConnection::onSocketConnected()
 {
     //socket.write("");
-    m_istate = Init;
+    m_istate = SocketConnected;
 }
 
 void TelnetConnection::onSocketError(QAbstractSocket::SocketError error)
@@ -112,11 +117,13 @@ void TelnetConnection::onSocketError(QAbstractSocket::SocketError error)
     sDebug() << socket.errorString();
     if (error == QAbstractSocket::ConnectionRefusedError)
         emit connectionError(TelnetConnection::ConnectionRefused);
+    m_istate = Init;
 }
 
 void TelnetConnection::onSocketDisconnected()
 {
     setState(Offline);
+    m_istate = Init;
     sDebug() << "Disconnected";
     emit disconnected();
 }
@@ -128,7 +135,7 @@ void TelnetConnection::onSocketReadReady()
   lDebug() << "Received data on socket";
   lDebug() << "DATA:" << data;
   lDebug() << m_state << m_istate;
-  if (m_istate == Init)
+  if (m_istate == SocketConnected)
   {
       if (data.indexOf("Error: NES Mini is offline") != -1)
       {
@@ -201,7 +208,7 @@ void TelnetConnection::onSocketReadReady()
           // Sometime it does not add \r\r\n because... telnet?
           if (!(readBuffer.at(charToCheck) == '\n' || readBuffer.at(charToCheck) == '\r'))
               break;
-          //lDebug() << "Cmd long, get \\r\\r\\n in the middle. We will remove stuff: nbRm" << nbRM << readBuffer.mid(charToCheck - 2, 5);
+          //lDebug()() << "Cmd long, get \\r\\r\\n in the middle. We will remove stuff: nbRm" << nbRM << readBuffer.mid(charToCheck - 2, 5);
           while (charToCheck < readBuffer.size() && nbRM < 3)
           {
               nbRM++;
@@ -222,7 +229,7 @@ void TelnetConnection::onSocketReadReady()
           charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
       }
   }
-  //lDebug() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
+  //lDebug()() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
   // We are waiting for the output of a command
   if (m_istate == WaitingForCmd)
   {
