@@ -220,7 +220,7 @@ void TelnetConnection::onSocketReadReady()
           charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
       }
   }
-  sDebug() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
+  lDebug() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
   // We are waiting for the output of a command
   if (m_istate == WaitingForCmd)
   {
