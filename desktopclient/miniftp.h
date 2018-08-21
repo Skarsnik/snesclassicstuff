@@ -18,6 +18,7 @@ public:
         Connected
     };
     explicit MiniFtp(QObject *parent = nullptr);
+    virtual ~MiniFtp();
     void          connect();
     QByteArray    get(QString file);
     void          put(QString dest, QByteArray& data);

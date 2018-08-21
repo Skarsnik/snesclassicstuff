@@ -21,9 +21,11 @@ public:
     Q_ENUM(ConnectionError)
     Q_ENUM(State)
 
-private:
+//private:
         enum InternalState {
             Init,
+            AttemptConnection,
+            SocketConnected,
             LoginWritten,
             Logged,
             PromptChangeWritten,
@@ -32,6 +34,7 @@ private:
             DataWritten,
             WaitingForCmd
         };
+        Q_ENUM(InternalState)
 public:
     TelnetConnection(const QString& hostname, int port, const QString& user, const QString& password);
     QByteArray  syncExecuteCommand(QString cmd);
@@ -74,6 +77,7 @@ private:
 
 
         void    writeToTelnet(QByteArray toWrite);
+        void    setState(State st);
 };
 
 #endif // TELNETCONNECTION_H
