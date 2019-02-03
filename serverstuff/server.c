@@ -28,6 +28,10 @@ static bool add_to_clients(int  client_fd)
             clients[i].in_cmd = false;
             clients[i].write_buffer = NULL;
             clients[i].write_buffer_size = 0;
+            clients[i].file_to_stream = 0;
+            clients[i].upload_file_fd = -1;
+            clients[i].uploaded_size = 0;
+            clients[i].uploaded_file_size = 0;
             return true;
         }
     }
@@ -66,17 +70,94 @@ static bool read_client_data(int fd)
     s_debug("Readed %d data on %d\n", read_size, fd);
     if (read_size <= 0)
         return false;
-    memcpy(client->pending_data + client->pending_size, &buff, read_size);
-    client->pending_size += read_size;
-    process_command(client);
+    client->readed_size = read_size;
+    memcpy(client->readed_data, &buff, read_size);
+    preprocess_data(client);
     return true;
 }
 
-int main(int ac, char *ag[])
+/* Let's handle partial read in this */
+void preprocess_data(struct client *client)
+{
+    unsigned int read_pos = 0;
+    //printf("Pre:Read size : %d\n", client->readed_size);
+    while (read_pos == 0 || read_pos < client->readed_size)
+    {
+        if (client->in_cmd)
+        {
+            //s_debug("Pre:WRITE");
+            unsigned int to_complete_size = 0;
+            if (client->current_cmd == WRITE_MEM)
+                to_complete_size = client->write_info.size - client->write_buffer_size;
+            if (client->current_cmd == PUT_FILE)
+                to_complete_size = client->uploaded_file_size - client->uploaded_size;
+            // Read data contains etheir all data or partial.
+            if (to_complete_size <= client->readed_size - read_pos)
+            {
+                ///printf("get all write data\n");
+                memcpy(client->pending_data, client->readed_data + read_pos, to_complete_size);
+                client->pending_size = to_complete_size;
+                read_pos += to_complete_size;
+            } else {
+                //printf("Partial write data\n");
+                memcpy(client->pending_data, client->readed_data + read_pos, client->readed_size - read_pos);
+                client->pending_size = client->readed_size - read_pos;
+                read_pos = client->readed_size;
+            }
+            process_command(client);
+            client->pending_pos = 0;
+            client->pending_size = 0;
+            continue ;
+        }
+        //s_debug("Pre:Checking \\n\n");
+        bool has_endl = false;
+        for (unsigned int i = read_pos; i < client->readed_size; i++)
+        {
+            if (client->readed_data[i] == '\n')
+            {
+                has_endl = true;
+                memcpy(client->pending_data + client->pending_pos, client->readed_data + read_pos, i + 1 - read_pos);
+                client->pending_size += i + 1 - read_pos;
+                read_pos = i + 1;
+                process_command(client);
+                client->pending_pos = 0;
+                client->pending_size = 0;
+                //printf("read pos: %d\n", read_pos);
+                break;
+            }
+        }
+        if (has_endl)
+            continue;
+        // we should have reached unprocessed data
+        memcpy(client->pending_data + client->pending_pos, client->readed_data + read_pos, client->readed_size - read_pos);
+        client->pending_pos += client->readed_size - read_pos;
+        client->pending_size += client->readed_size - read_pos;
+        //printf("ppos, ppsize : %d, %d\n", client->pending_pos, client->pending_size);
+        break;
+    }
+}
+
+static  struct client* is_streaming_fd(int fd)
+{
+    for (unsigned int i = 0; i < 5; i++)
+    {
+        if (clients[i].socket_fd && clients[i].file_to_stream == fd)
+            return &clients[i];
+    }
+    return NULL;
+}
+
+fd_set active_set;
+
+void    add_streaming_fd(int new_fd)
+{
+    FD_SET(new_fd, &active_set);
+}
+
+int start_server()
 {
     int server_socket;
     struct sockaddr_in name;
-    fd_set active_set;
 
     for (unsigned int i = 0; i < 5; i++)
         clients[i].socket_fd = 0;
@@ -104,16 +185,16 @@ int main(int ac, char *ag[])
     s_debug("Server now running fd number is : %d\n", server_socket);
     while (true)
     {
-        FD_SET(server_socket, &active_set);
-        s_debug("SELECT - %d\n", FD_ISSET(server_socket, &active_set));
-        if (select(FD_SETSIZE, &active_set, NULL, NULL, NULL) < 0)
+        fd_set read_fd_set = active_set;
+        if (select(FD_SETSIZE, &read_fd_set, NULL, NULL, NULL) < 0)
         {
             fprintf(stderr, "Select error : %s\n", strerror(errno));
             return 1;
         }
-        for (unsigned int i = 0; i < FD_SETSIZE; i++)
+        s_debug("==Something ready==\n");
+        for (unsigned int i = server_socket; i < FD_SETSIZE; i++)
         {
-            if (FD_ISSET(i, &active_set))
+            if (FD_ISSET(i, &read_fd_set))
             {
                 if (i == server_socket)
                 {
@@ -139,10 +220,25 @@ int main(int ac, char *ag[])
                     }
                 
                 } else {
-                    s_debug("FD %d is ready\n", i);
+                    //s_debug("FD %d is ready\n", i);
+                    struct client* streaming_client = is_streaming_fd(i);
+                    if (streaming_client != NULL)
+                    {
+                        s_debug("A streamed file is ready for read\n");
+                        char m_buffer[512];
+                        int  readed;
+                        while (readed = read(i, &m_buffer, 512))
+                            write(streaming_client->socket_fd, m_buffer, readed);
+                    }
                     if (read_client_data(i) == false)
                     {
                         s_debug("Disconnecting client\n");
+                        struct client* to_del_client = get_client(i);
+                        if (to_del_client->file_to_stream)
+                        {
+                            FD_CLR(to_del_client->file_to_stream, &active_set);
+                            close(to_del_client->file_to_stream);
+                        }
                         remove_client(i);
                         FD_CLR(i, &active_set);
                         close(i);
@@ -151,5 +247,6 @@ int main(int ac, char *ag[])
                 }
             }
         }
+        s_debug("==End check\n");
     }
 }

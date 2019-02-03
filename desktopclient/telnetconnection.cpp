@@ -13,7 +13,7 @@ Q_LOGGING_CATEGORY(log_lowtelnetconnection, "LowLevelTelnet")
 // TELNET STUFF
 
 
-#define CLOVER_SHELL_PROMPT "root@CLOVER:~# "
+#define CLOVER_SHELL_PROMPT "root@madmonkey:~# "
 #define CHANGED_PROMPT      "KLDFJLD45SDKL@4"
 #define CLOVER_SHELL_PROMPT_SIZE 15
 #define FUCK_LINE_SIZE 80
@@ -23,7 +23,9 @@ Q_LOGGING_CATEGORY(log_lowtelnetconnection, "LowLevelTelnet")
 #define DONT 0xfe
 #define CMD 0xff
 #define CMD_ECHO 1
+#define NAWS 31
 #define ITPC 244
+#define SGA 3
 
 
 
@@ -45,6 +47,14 @@ TelnetConnection::TelnetConnection(const QString &hostname, int port, const QStr
     nbRM = 0;
     sDebug() << "Creating telnetconnection object";
     charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
+    telnetCmd[WONT] = "WONT";
+    telnetCmd[WILL] = "WILL";
+    telnetCmd[DO] = "DO";
+    telnetCmd[DONT] = "DONT";
+    telnetCmd[255] = "CMD";
+    telnetCmd[CMD_ECHO] = "ECHO";
+    telnetCmd[NAWS] = "NAWS";
+    telnetCmd[SGA] = "SGA";
 }
 
 QByteArray TelnetConnection::syncExecuteCommand(QString cmd)
@@ -84,7 +94,6 @@ void TelnetConnection::executeCommand(QString toSend)
 {
     sDebug() << "Executing : " << toSend;
     writeToTelnet(toSend.toLatin1() + "\r\n");
-    setState(WaitingForCommand);
 }
 
 void TelnetConnection::close()
@@ -106,9 +115,22 @@ void TelnetConnection::close()
     sDebug() << "Should be closed";
 }
 
+static void append_cmd(QByteArray& data, quint8 what, quint8 cmd)
+{
+    data.append(CMD);
+    data.append(what);
+    data.append(cmd);
+}
+
 void TelnetConnection::onSocketConnected()
 {
-    //socket.write("");
+    QByteArray cmd;
+    append_cmd(cmd, DO, CMD_ECHO);
+    append_cmd(cmd, WILL, SGA);
+    append_cmd(cmd, DO, SGA);
+    append_cmd(cmd, WONT, NAWS);
+    socket.write(cmd);
+
     m_istate = SocketConnected;
 }
 
@@ -147,12 +169,22 @@ void TelnetConnection::onSocketReadReady()
   {
       sDebug() << "Telnet cmd receive, we don't care for now";
       lDebug() << "Received : " << data;
+      unsigned int cpt;
+      QString   cmd;
+      for (cpt = 0; cpt < data.size(); cpt++)
+      {
+          if (telnetCmd.contains((quint8)data.at(cpt)))
+              cmd.append(telnetCmd[(quint8)data.at(cpt)] + " ");
+          else
+              cmd.append(QString::number((quint8)data.at(cpt), 16) + " ");
+      }
+      sDebug() << cmd;
       char buf[3];
       buf[0] = CMD;
       buf[1] = WILL;
       buf[2] = 34; // Line mode;
       socket.write(buf,  3);
-      return ;
+      //return ;
   }
   if (data.indexOf(0xFF) != -1)
   {
@@ -177,14 +209,14 @@ void TelnetConnection::onSocketReadReady()
       return ;
   }
   //qDebug() << "RAW:" << data;
-  if (m_istate == LoginWritten && data == CLOVER_SHELL_PROMPT)
+  if (m_istate == LoginWritten && data.indexOf(CLOVER_SHELL_PROMPT) != -1)
   {
       m_istate = Logged;
       writeToTelnet("PS1='" + QByteArray(CHANGED_PROMPT) + "'\r\n");
       m_istate = PromptChangeWritten;
       return ;
   }
-  if (data.indexOf("CLOVER login: ") != -1)
+  if (data.indexOf("madmonkey login: ") != -1)
   {
       writeToTelnet("root\r\n");
       m_istate = LoginWritten;
@@ -198,42 +230,14 @@ void TelnetConnection::onSocketReadReady()
   // A command string has be written, we want to remove the feedback of it
   if (m_istate == DataWritten)
   {
-      lDebug() << "Removing input to the output";
-      lDebug() << "DataWritten : " << lastSent << lastSent.size();
-      lDebug() << "Received : " << readBuffer << readBuffer.size() << " charToCheck" << charToCheck;
-      //Bullshit to remove \r\r\n when the cmd sent is more than 80 (including prompt) (fuck you telnet)
-      while (readBuffer.size() > charToCheck)
-      {
-          lDebug() << "Cmd long, get \\r\\r\\n in the middle. We will remove stuff if valid -- nbRm" << nbRM << readBuffer.mid(charToCheck - 2, 5);
-          // Sometime it does not add \r\r\n because... telnet?
-          if (!(readBuffer.at(charToCheck) == '\n' || readBuffer.at(charToCheck) == '\r'))
-              break;
-          //lDebug()() << "Cmd long, get \\r\\r\\n in the middle. We will remove stuff: nbRm" << nbRM << readBuffer.mid(charToCheck - 2, 5);
-          while (charToCheck < readBuffer.size() && nbRM < 3)
-          {
-              nbRM++;
-              readBuffer.remove(charToCheck, 1);
-          }
-          lDebug() << "Removed" << nbRM << "/3 Characters";
-          if (nbRM == 3)
-          {
-            charToCheck += FUCK_LINE_SIZE;
-            nbRM = 0;
-          }
-          lDebug() << "End of remove" << readBuffer << nbRM << readBuffer.size() << charToCheck;
-      }
-      if (readBuffer.indexOf(lastSent) == 0)
+      if (readBuffer.size() >= calcSizeSent)
       {
           m_istate = WaitingForCmd;
-          readBuffer.remove(0, lastSent.size());
-          charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
+          readBuffer.remove(0, calcSizeSent);
+          //charToCheck = FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE;
       }
   }
-<<<<<<< HEAD
-  lDebug() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
-=======
   //lDebug()() << "PIKOOOOOOOOOOO" << WaitingForCmd << m_istate;
->>>>>>> a25ae5b731241ca0083890c8a33db32e82275b77
   // We are waiting for the output of a command
   if (m_istate == WaitingForCmd)
   {
@@ -278,6 +282,18 @@ void TelnetConnection::writeToTelnet(QByteArray toWrite)
     if (m_istate == IReady || m_istate == PromptChanged)
         m_istate = DataWritten;
     lastSent = toWrite;
+    calcSizeSent = toWrite.size();
+    if (calcSizeSent > FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE)
+    {
+        unsigned int mSize = calcSizeSent - (FUCK_LINE_SIZE - CLOVER_SHELL_PROMPT_SIZE);
+        calcSizeSent += 3;
+        while (mSize > FUCK_LINE_SIZE)
+        {
+            mSize -= FUCK_LINE_SIZE;
+            calcSizeSent += 3;
+        }
+    }
+    sDebug() << "Original size is " << toWrite.size() << "should be " << calcSizeSent;
     socket.write(toWrite);
 }
 

@@ -67,6 +67,7 @@ private:
         QString m_password;
         QTcpSocket  socket;
         QByteArray lastSent;
+        unsigned int calcSizeSent;
         QByteArray readBuffer;
         QByteArray lastCommandReturn;
         State       m_state;
@@ -74,6 +75,7 @@ private:
         bool    oneCommandMode;
         unsigned int        nbRM;
         unsigned int        charToCheck;
+        QMap<quint8, QString> telnetCmd;
 
 
         void    writeToTelnet(QByteArray toWrite);
