@@ -256,7 +256,13 @@ static void cmd_put_file(const char* cmd_block, struct client* client)
 
 static void cmd_exec_detached_command(const char* cmd_block, struct client* client)
 {
-
+    char*   cmd;
+    cmd_block += 13;
+    cmd = malloc(strlen(cmd_block) + 2);
+    strcpy(cmd, cmd_block);
+    cmd[strlen(cmd_block)] = '&';
+    s_debug("Runing detached %s\n", cmd);
+    system(cmd);
 }
 
 void    process_command(struct client* client)
@@ -312,7 +318,7 @@ void    process_command(struct client* client)
             client->current_cmd = PUT_FILE;
             cmd_put_file(cmd_block, client);
         }
-        if (strncmp(cmd_block, "DETACHED_CMD ", 13) == 0)
+        if (strncmp(cmd_block, "CMD_DETACHED ", 13) == 0)
         {
             client->current_cmd = DETACHED_COMMAND;
             cmd_exec_detached_command(cmd_block, client);
