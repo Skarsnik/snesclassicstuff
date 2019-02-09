@@ -181,6 +181,9 @@ static void cmd_stream_file(const char* cmd_block, struct client* client)
         write(client->socket_fd, "KO\n", 3);
         return ;
     }
+    int flags = fcntl(client->file_to_stream, F_GETFL, 0);
+    fcntl(client->file_to_stream, F_SETFL, flags | O_NONBLOCK);
+    
     add_streaming_fd(client->file_to_stream);
 }
 
@@ -258,11 +261,23 @@ static void cmd_exec_detached_command(const char* cmd_block, struct client* clie
 {
     char*   cmd;
     cmd_block += 13;
-    cmd = malloc(strlen(cmd_block) + 2);
+    /*cmd = malloc(strlen(cmd_block) + 2);
     strcpy(cmd, cmd_block);
     cmd[strlen(cmd_block)] = '&';
+    cmd[strlen(cmd_block) + 1] = 0;
     s_debug("Runing detached %s\n", cmd);
-    system(cmd);
+    system(cmd);*/
+    int pid = fork();
+    if (pid == 0)
+    {
+        FILE* p = popen(cmd_block, "r");
+        pclose(p);
+        exit(0);
+    }
+    else
+    {
+
+    }
 }
 
 void    process_command(struct client* client)

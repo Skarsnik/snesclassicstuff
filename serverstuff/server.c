@@ -227,8 +227,12 @@ int start_server()
                         s_debug("A streamed file is ready for read\n");
                         char m_buffer[512];
                         int  readed;
-                        while (readed = read(i, &m_buffer, 512))
+                        while ((readed = read(i, &m_buffer, 512)) > 0)
+                        {
+                            s_debug("Readed %d on the streamed file", readed);
                             write(streaming_client->socket_fd, m_buffer, readed);
+                        }
+                        continue;
                     }
                     if (read_client_data(i) == false)
                     {
