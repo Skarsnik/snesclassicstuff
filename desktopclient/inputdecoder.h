@@ -1,3 +1,4 @@
+
 #ifndef INPUTDECODER_H
 #define INPUTDECODER_H
 
@@ -10,7 +11,7 @@ struct RawInputEvent
     quint32 time_us;
     quint16 type;
     quint16 code;
-    quint32 value;
+    qint32 value;
 };
 
 
@@ -43,11 +44,13 @@ signals:
 
 public slots:
     void    decodeHexdump(QString toDecode);
+    void    decodeBinary(QByteArray toDecode);
 
 private:
     void processEvent(RawInputEvent ev);
     bool    Lpressed;
     bool    Rpressed;
+    RawInputEvent binaryToRawInputEvent(QByteArray data);
 };
 
 #endif // INPUTDECODER_H

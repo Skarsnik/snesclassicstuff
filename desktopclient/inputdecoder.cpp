@@ -142,3 +142,41 @@ void InputDecoder::decodeHexdump(QString toDecode)
         emit buttonReleased(key);*/
 
 }
+
+
+// This match the snes classic structure size
+struct mtimeval {
+               quint32      tv_sec;
+               quint32      tv_usec;
+};
+
+
+struct input_event {
+    struct mtimeval time;
+    quint16 type;
+    quint16 code;
+    qint32  value;
+};
+
+RawInputEvent    InputDecoder::binaryToRawInputEvent(QByteArray data)
+{
+    RawInputEvent toret;
+    struct input_event* me = reinterpret_cast<struct input_event*>(data.data());
+
+    toret.time_s = me->time.tv_sec;
+    toret.time_us = me->time.tv_usec;
+    toret.code = me->code;
+    toret.type = me->type;
+    toret.value = me->value;
+    return toret;
+
+}
+
+void InputDecoder::decodeBinary(QByteArray toDecode)
+{
+    while (!toDecode.isEmpty())
+    {
+        processEvent(binaryToRawInputEvent(toDecode.left(16)));
+        toDecode.remove(0, 16);
+    }
+}
