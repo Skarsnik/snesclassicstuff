@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 #include <unistd.h>
-#define MY_DEBUG 1
+//#define MY_DEBUG 1
 #ifdef MY_DEBUG
 #define s_debug(...)  printf(__VA_ARGS__)
 #else
