@@ -2,7 +2,7 @@
 #include <QtEndian>
 #include <QDebug>
 
-InputDecoder::InputDecoder() : QObject()
+InputDecoder::InputDecoder() : InputProvider ()
 {
     Lpressed = false;
     Rpressed = false;
