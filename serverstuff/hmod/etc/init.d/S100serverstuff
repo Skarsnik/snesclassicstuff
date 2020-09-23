@@ -1,0 +1,38 @@
+#!/bin/sh -e
+
+start() {
+    env -i USER="root" \
+      LOGNAME="root" \
+      HOME="/root" \
+      SHELL="/bin/sh" \
+      PATH="$PATH" \
+      TERM="linux" \
+      ENV='$HOME/.shrc' \
+      /bin/serverstuff --daemon
+}
+
+stop() {
+    killall -q serverstuff
+}
+
+restart() {
+    stop
+    start
+}
+
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart|reload)
+    restart
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+esac
+
+exit $?
