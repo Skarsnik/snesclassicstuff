@@ -13,15 +13,31 @@ StuffClient::StuffClient(QObject *parent) : QObject(parent)
     socket = new QTcpSocket();
     streamMode = false;
     QObject::connect(socket, &QTcpSocket::connected, this, &StuffClient::connected);
+    QObject::connect(socket, &QTcpSocket::stateChanged, this, [=](QAbstractSocket::SocketState state) {
+        sDebug() << "State changed to " << state;
+        ;
+    });
+    QObject::connect(socket, &QTcpSocket::errorOccurred, this, [=](QAbstractSocket::SocketError err) {
+        sDebug() << "Error" << err;
+        ;
+    });
+    QObject::connect(socket, &QTcpSocket::readyRead, this, &StuffClient::onReadyRead);
+    m_classicIp = SNESCLASSIC_IP;
+}
+
+StuffClient::StuffClient(QString snesclassicIp, QObject* parent) : StuffClient(parent)
+{
+    m_classicIp = snesclassicIp;
 }
 
 bool StuffClient::connect()
 {
-    socket->connectToHost(SNESCLASSIC_IP, 1042);
+    if (socket->state() != QAbstractSocket::ConnectingState)
+        socket->connectToHost(m_classicIp, 1042);
     return true;
     //return socket->waitForConnected(100);
 }
-
+/*
 QByteArray StuffClient::waitForCommand(QByteArray cmd)
 {
     QByteArray toret;
@@ -35,11 +51,19 @@ QByteArray StuffClient::waitForCommand(QByteArray cmd)
             if (data.isEmpty())
                 break;
             toret += data;
-            if (!socket->waitForReadyRead(50))
+            if (!socket->waitForReadyRead(100))
                 break;
         }
     toret.truncate(toret.size() - 4);
     return toret;
+}*/
+
+void   StuffClient::executeCommand(QByteArray cmd)
+{
+    state = ClientState::DoingCommand;
+    m_commandDatas.clear();
+    sDebug() << "Executing command" << cmd;
+    writeSocket("CMD " + cmd + "\n");
 }
 
 void StuffClient::detachedCommand(QByteArray cmd)
@@ -50,8 +74,9 @@ void StuffClient::detachedCommand(QByteArray cmd)
 
 void StuffClient::streamFile(QByteArray filePath)
 {
+    state = StreamingFile;
     writeSocket("STREAM_FILE " + filePath + "\n");
-    QObject::connect(socket, &QTcpSocket::readyRead, this, &StuffClient::onReadyRead);
+
 }
 
 // Savestate Files are like 500Kbytes, should not take that long
@@ -65,29 +90,10 @@ void StuffClient::sendFile(QByteArray filePath, QByteArray data)
 
 // This return 10 bytes of size then the data;
 
-QByteArray StuffClient::getFile(QByteArray filePath)
+void    StuffClient::getFile(QByteArray filePath)
 {
-    QByteArray toret;
+    state = ClientState::GettingFile;
     writeSocket("GET_FILE " + filePath + "\n");
-    socket->waitForReadyRead(50);
-    QByteArray sizeData = socket->read(10);
-    off_t size = 0;
-    for (unsigned int i = 0; i < 10; i++)
-    {
-        size |= sizeData.at(i) << 8 * (9 - i);
-    }
-    sDebug() << "File size is " << size;
-    socket->waitForReadyRead(50);
-    forever {
-            QByteArray data = socket->readAll();
-            sDebug() << "Reading" << data;
-            toret += data;
-            if (toret.size() == size)
-                break;
-            if (!socket->waitForReadyRead(50))
-                break;
-        }
-    return toret;
 }
 
 void StuffClient::close()
@@ -96,10 +102,64 @@ void StuffClient::close()
     socket->waitForDisconnected(100);
 }
 
+QByteArray StuffClient::commandDatas() const
+{
+    return m_commandDatas;
+}
+
 void StuffClient::onReadyRead()
 {
-    sDebug() << "Ready read";
-    emit newFileData(socket->readAll());
+    sDebug() << "Ready read" << socket->bytesAvailable();
+    switch (state)
+    {
+    case ClientState::StreamingFile:
+    {
+        emit newFileData(socket->readAll());
+        break;
+    }
+    case ClientState::DoingCommand:
+    {
+        m_commandDatas.append(socket->readAll());
+        sDebug() << m_commandDatas << m_commandDatas.right(4) << QByteArray(4, 0);
+        if (m_commandDatas.right(4) == QByteArray(4, 0))
+        {
+            sDebug() << "Command finished";
+            m_commandDatas.truncate(m_commandDatas.size() - 4);
+            emit commandFinished(true);
+            return ;
+        }
+        if (m_commandDatas.right(9) == QByteArray("\0\0ERROR\0\0", 9))
+        {
+            sDebug() << "Command error";
+            m_commandDatas.clear();
+            emit commandFinished(false);
+        }
+        break;
+    }
+    case ClientState::GettingFile:
+    {
+        QByteArray socketData = socket->readAll();
+        if (fileSizeGot == false)
+        {
+            fileSizeData.append(socketData);
+            if (fileSizeData.size() >= 10)
+            {
+                fileSizeGot = true;
+                off_t size = 0;
+                for (unsigned int i = 0; i < 10; i++)
+                {
+                    size |= fileSizeData.at(i) << 8 * (9 - i);
+                }
+                emit receivedFileSize(size);
+                if (fileSizeData.size() > 10)
+                    emit newFileData(fileSizeData.right(10));
+            }
+        } else {
+            emit newFileData(socketData);
+        }
+        break;
+    }
+    }
 }
 
 bool StuffClient::isConnected()
